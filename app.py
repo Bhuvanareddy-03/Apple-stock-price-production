@@ -1,12 +1,10 @@
-# app.py
-
 import streamlit as st
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.statespace.sarimax import SARIMAX
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from sklearn.metrics import mean_squared_error, r2_score
 from xgboost import XGBRegressor
 from sklearn.preprocessing import MinMaxScaler
 from math import sqrt
@@ -26,13 +24,17 @@ forecast_days = st.sidebar.slider("Forecast Horizon (Days)", min_value=10, max_v
 # ----------------------------------------------------------
 # Load and Prepare Dataset
 # ----------------------------------------------------------
-st.title("🍏 Apple Stock Price Prediction")
-df = pd.read_csv("P587 DATASET.csv")
-df['Date'] = pd.to_datetime(df['Date'])
-df = df.sort_values(by='Date')
-df.set_index('Date', inplace=True)
-df = df.fillna(method='ffill')
+@st.cache_data
+def load_data():
+    df = pd.read_csv("P587 DATASET.csv")
+    df['Date'] = pd.to_datetime(df['Date'])
+    df = df.sort_values(by='Date')
+    df.set_index('Date', inplace=True)
+    df = df.fillna(method='ffill')
+    return df
 
+df = load_data()
+st.title("🍏 Apple Stock Price Prediction")
 st.subheader("📉 Historical Closing Price")
 st.line_chart(df['Close'])
 
@@ -43,118 +45,95 @@ train_size = int(len(df) * 0.9)
 train, test = df['Close'][:train_size], df['Close'][train_size:]
 
 # ----------------------------------------------------------
-# ARIMA Model
-# ----------------------------------------------------------
-arima_model = ARIMA(train, order=(5,1,0))
-arima_fit = arima_model.fit()
-arima_pred = arima_fit.predict(start=len(train), end=len(train)+len(test)-1, typ='levels')
-arima_pred.index = test.index
-
-# ----------------------------------------------------------
-# SARIMA Model
-# ----------------------------------------------------------
-sarima_model = SARIMAX(train, order=(1,1,1), seasonal_order=(1,1,1,12))
-sarima_fit = sarima_model.fit(disp=False)
-sarima_pred = sarima_fit.predict(start=len(train), end=len(train)+len(test)-1, typ='levels')
-sarima_pred.index = test.index
-
-# ----------------------------------------------------------
-# XGBoost Model
-# ----------------------------------------------------------
-df_ml = df.copy()
-df_ml['Day'] = df_ml.index.day
-df_ml['Month'] = df_ml.index.month
-df_ml['Year'] = df_ml.index.year
-df_ml['MA_5'] = df_ml['Close'].rolling(5).mean()
-df_ml['MA_10'] = df_ml['Close'].rolling(10).mean()
-df_ml = df_ml.dropna()
-
-X = df_ml[['Open','High','Low','Volume','Day','Month','Year','MA_5','MA_10']]
-y = df_ml['Close']
-split = int(len(X)*0.9)
-X_train, X_test = X[:split], X[split:]
-y_train, y_test = y[:split], y[split:]
-
-scaler = MinMaxScaler()
-X_train_scaled = scaler.fit_transform(X_train)
-X_test_scaled = scaler.transform(X_test)
-
-xgb_model = XGBRegressor(objective='reg:squarederror', n_estimators=500, learning_rate=0.05, random_state=42)
-xgb_model.fit(X_train_scaled, y_train)
-xgb_pred = xgb_model.predict(X_test_scaled)
-
-# ----------------------------------------------------------
-# LSTM Model
-# ----------------------------------------------------------
-data = df[['Close']]
-scaler_lstm = MinMaxScaler(feature_range=(0,1))
-scaled_data = scaler_lstm.fit_transform(data)
-
-train_data, test_data = scaled_data[:train_size], scaled_data[train_size:]
-
-def create_dataset(dataset, time_step=60):
-    X, Y = [], []
-    for i in range(len(dataset)-time_step-1):
-        X.append(dataset[i:(i+time_step), 0])
-        Y.append(dataset[i + time_step, 0])
-    return np.array(X), np.array(Y)
-
-time_step = 60
-X_train_lstm, y_train_lstm = create_dataset(train_data, time_step)
-X_test_lstm, y_test_lstm = create_dataset(test_data, time_step)
-
-X_train_lstm = X_train_lstm.reshape(X_train_lstm.shape[0], X_train_lstm.shape[1], 1)
-X_test_lstm = X_test_lstm.reshape(X_test_lstm.shape[0], X_test_lstm.shape[1], 1)
-
-model_lstm = Sequential([
-    LSTM(50, return_sequences=True, input_shape=(X_train_lstm.shape[1], 1)),
-    LSTM(50),
-    Dense(1)
-])
-model_lstm.compile(optimizer='adam', loss='mean_squared_error')
-early_stop = EarlyStopping(monitor='loss', patience=5, restore_best_weights=True)
-model_lstm.fit(X_train_lstm, y_train_lstm, epochs=50, batch_size=32, verbose=0, callbacks=[early_stop])
-
-lstm_pred = model_lstm.predict(X_test_lstm)
-lstm_pred = scaler_lstm.inverse_transform(lstm_pred)
-y_test_actual = scaler_lstm.inverse_transform(y_test_lstm.reshape(-1,1))
-
-# ----------------------------------------------------------
-# Model Comparison
-# ----------------------------------------------------------
-metrics = {
-    'ARIMA': r2_score(test, arima_pred),
-    'SARIMA': r2_score(test, sarima_pred),
-    'XGBoost': r2_score(y_test, xgb_pred),
-    'LSTM': r2_score(y_test_actual, lstm_pred)
-}
-rmse_vals = {
-    'ARIMA': sqrt(mean_squared_error(test, arima_pred)),
-    'SARIMA': sqrt(mean_squared_error(test, sarima_pred)),
-    'XGBoost': sqrt(mean_squared_error(y_test, xgb_pred)),
-    'LSTM': sqrt(mean_squared_error(y_test_actual, lstm_pred))
-}
-
-comparison_df = pd.DataFrame({
-    'Model': list(metrics.keys()),
-    'R² Score': list(metrics.values()),
-    'RMSE': list(rmse_vals.values())
-}).round(4)
-
-st.subheader("📊 Model Performance Comparison")
-st.dataframe(comparison_df)
-
-# ----------------------------------------------------------
 # Forecasting
 # ----------------------------------------------------------
 st.subheader(f"📅 {forecast_days}-Day Forecast using {model_choice}")
+
 if model_choice == 'ARIMA':
+    arima_model = ARIMA(train, order=(5,1,0))
+    arima_fit = arima_model.fit()
+    arima_pred = arima_fit.predict(start=len(train), end=len(train)+len(test)-1, typ='levels')
+    arima_pred.index = test.index
     forecast = arima_fit.forecast(steps=forecast_days)
+    r2 = r2_score(test, arima_pred)
+    rmse = sqrt(mean_squared_error(test, arima_pred))
+
 elif model_choice == 'SARIMA':
+    sarima_model = SARIMAX(train, order=(1,1,1), seasonal_order=(1,1,1,12))
+    sarima_fit = sarima_model.fit(disp=False)
+    sarima_pred = sarima_fit.predict(start=len(train), end=len(train)+len(test)-1, typ='levels')
+    sarima_pred.index = test.index
     forecast = sarima_fit.forecast(steps=forecast_days)
+    r2 = r2_score(test, sarima_pred)
+    rmse = sqrt(mean_squared_error(test, sarima_pred))
+
 elif model_choice == 'XGBoost':
-    forecast = xgb_model.predict(X_test_scaled[-forecast_days:])
+    df_ml = df.copy()
+    df_ml['Day'] = df_ml.index.day
+    df_ml['Month'] = df_ml.index.month
+    df_ml['Year'] = df_ml.index.year
+    df_ml['MA_5'] = df_ml['Close'].rolling(5).mean()
+    df_ml['MA_10'] = df_ml['Close'].rolling(10).mean()
+    df_ml = df_ml.dropna()
+
+    X = df_ml[['Open','High','Low','Volume','Day','Month','Year','MA_5','MA_10']]
+    y = df_ml['Close']
+    split = int(len(X)*0.9)
+    X_train, X_test = X[:split], X[split:]
+    y_train, y_test = y[:split], y[split:]
+
+    scaler = MinMaxScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+
+    xgb_model = XGBRegressor(objective='reg:squarederror', n_estimators=500, learning_rate=0.05, random_state=42)
+    xgb_model.fit(X_train_scaled, y_train)
+    xgb_pred = xgb_model.predict(X_test_scaled)
+    r2 = r2_score(y_test, xgb_pred)
+    rmse = sqrt(mean_squared_error(y_test, xgb_pred))
+
+    # Forecast
+    last_known = X_test_scaled[-forecast_days:]
+    forecast = xgb_model.predict(last_known)
+
 elif model_choice == 'LSTM':
+    data = df[['Close']]
+    scaler_lstm = MinMaxScaler(feature_range=(0,1))
+    scaled_data = scaler_lstm.fit_transform(data)
+
+    def create_dataset(dataset, time_step=60):
+        X, Y = [], []
+        for i in range(len(dataset)-time_step-1):
+            X.append(dataset[i:(i+time_step), 0])
+            Y.append(dataset[i + time_step, 0])
+        return np.array(X), np.array(Y)
+
+    time_step = 60
+    train_data = scaled_data[:train_size]
+    test_data = scaled_data[train_size - time_step:]
+
+    X_train_lstm, y_train_lstm = create_dataset(train_data, time_step)
+    X_test_lstm, y_test_lstm = create_dataset(test_data, time_step)
+
+    X_train_lstm = X_train_lstm.reshape(X_train_lstm.shape[0], X_train_lstm.shape[1], 1)
+    X_test_lstm = X_test_lstm.reshape(X_test_lstm.shape[0], X_test_lstm.shape[1], 1)
+
+    model_lstm = Sequential([
+        LSTM(50, return_sequences=True, input_shape=(X_train_lstm.shape[1], 1)),
+        LSTM(50),
+        Dense(1)
+    ])
+    model_lstm.compile(optimizer='adam', loss='mean_squared_error')
+    early_stop = EarlyStopping(monitor='loss', patience=5, restore_best_weights=True)
+    model_lstm.fit(X_train_lstm, y_train_lstm, epochs=50, batch_size=32, verbose=0, callbacks=[early_stop])
+
+    lstm_pred = model_lstm.predict(X_test_lstm)
+    lstm_pred = scaler_lstm.inverse_transform(lstm_pred)
+    y_test_actual = scaler_lstm.inverse_transform(y_test_lstm.reshape(-1,1))
+    r2 = r2_score(y_test_actual, lstm_pred)
+    rmse = sqrt(mean_squared_error(y_test_actual, lstm_pred))
+
+    # Forecast
     last_60 = scaled_data[-60:]
     temp_input = list(last_60.reshape(1, -1)[0])
     lst_output = []
@@ -165,10 +144,17 @@ elif model_choice == 'LSTM':
         lst_output.append(yhat[0][0])
     forecast = scaler_lstm.inverse_transform(np.array(lst_output).reshape(-1,1)).flatten()
 
+# ----------------------------------------------------------
+# Display Forecast
+# ----------------------------------------------------------
 future_dates = pd.date_range(df.index[-1] + pd.Timedelta(days=1), periods=forecast_days)
 forecast_df = pd.DataFrame({'Date': future_dates, 'Predicted_Close': forecast}).set_index('Date')
 
 st.line_chart(pd.concat([df['Close'], forecast_df['Predicted_Close']]))
-
 st.write("🔮 Forecast Table")
 st.dataframe(forecast_df.head(10))
+
+# ----------------------------------------------------------
+# Display Metrics
+# ----------------------------------------------------------
+st.markdown(f"**📌 R² Score:** {r2:.4f}  **📉 RMSE:** {rmse:.4f}")
