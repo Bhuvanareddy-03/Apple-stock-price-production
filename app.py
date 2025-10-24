@@ -154,13 +154,4 @@ st.dataframe(forecast_df.head(10))
 
 st.markdown(f"**📌 R² Score:** {r2:.4f}  **📉 RMSE:** {rmse:.4f}")
 
-# ----------------------------------------------------------
-# Footer
-# ----------------------------------------------------------
-st.markdown("""
-<hr>
-<div style='text-align: center'>
-    Made with ❤️ by Bhuvaneswari in Bangalore<br>
-    <a href='https://github.com/yourusername/apple-stock-forecast' target='_blank'>GitHub Repo</a>
-</div>
-""", unsafe_allow_html=True)
+
