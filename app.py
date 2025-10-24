@@ -22,7 +22,7 @@ st.set_page_config(page_title="Apple Stock Forecast", page_icon="🍏", layout="
 # ----------------------------------------------------------
 # Sidebar Controls
 # ----------------------------------------------------------
-st.sidebar.image("assets/logo.png", width=150)
+st.sidebar.image("logo.png", width=150)
 st.sidebar.title("📈 Forecasting Controls")
 model_choice = st.sidebar.selectbox("Choose Model", ["ARIMA", "SARIMA", "XGBoost", "LSTM"])
 forecast_days = st.sidebar.slider("Forecast Horizon (Days)", min_value=10, max_value=60, value=30)
