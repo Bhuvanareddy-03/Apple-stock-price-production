@@ -110,8 +110,10 @@ if uploaded_file is not None:
     future_dates = pd.date_range(df.index[-1] + pd.Timedelta(days=1), periods=forecast_days)
     forecast_df = pd.DataFrame({'Date': future_dates, 'Predicted_Close': forecast}).set_index('Date')
 
-    st.subheader(f"🔮 {forecast_days}-Day Forecast")
+    st.subheader(f"📅 {forecast_days}-Day Forecast Table")
     st.dataframe(forecast_df.head(10))
+
+    st.subheader("📈 Historical + Forecasted Closing Prices")
     st.line_chart(pd.concat([df['Close'], forecast_df['Predicted_Close']]))
 else:
     st.info("📥 Please upload a CSV file with stock data to begin.")
