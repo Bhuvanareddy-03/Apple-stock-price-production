@@ -1,7 +1,6 @@
 import streamlit as st
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.preprocessing import MinMaxScaler
 from math import sqrt
@@ -14,13 +13,19 @@ warnings.filterwarnings("ignore")
 # ----------------------------------------------------------
 # Page Config
 # ----------------------------------------------------------
-st.set_page_config(page_title="Apple Stock Forecast", page_icon="🍏", layout="wide")
-st.title("🍏 Apple Stock Price Forecasting with LSTM")
+st.set_page_config(page_title="Stock Forecasting with LSTM", page_icon="📈", layout="wide")
+st.title("📈 Stock Price Forecasting with LSTM")
 
 # ----------------------------------------------------------
-# Upload Dataset
+# Sidebar Controls
 # ----------------------------------------------------------
-uploaded_file = st.file_uploader("📤 Upload your stock CSV file", type=["csv"])
+st.sidebar.header("🔧 Controls")
+uploaded_file = st.sidebar.file_uploader("Upload your stock CSV file", type=["csv"])
+forecast_days = st.sidebar.slider("Select number of days to forecast", min_value=10, max_value=60, value=30)
+
+# ----------------------------------------------------------
+# Load and Prepare Data
+# ----------------------------------------------------------
 if uploaded_file is not None:
     df = pd.read_csv(uploaded_file)
     df['Date'] = pd.to_datetime(df['Date'])
@@ -78,9 +83,6 @@ if uploaded_file is not None:
     r2 = r2_score(y_test_actual, pred_actual)
     rmse = sqrt(mean_squared_error(y_test_actual, pred_actual))
 
-    # ----------------------------------------------------------
-    # Visualize Actual vs Predicted
-    # ----------------------------------------------------------
     st.subheader("📊 Actual vs Predicted Closing Prices")
     result_df = pd.DataFrame({
         'Actual': y_test_actual.flatten(),
@@ -90,5 +92,26 @@ if uploaded_file is not None:
     st.line_chart(result_df)
 
     st.markdown(f"**📌 R² Score:** {r2:.4f}  **📉 RMSE:** {rmse:.4f}")
+
+    # ----------------------------------------------------------
+    # Forecast Future Values
+    # ----------------------------------------------------------
+    last_60 = scaled_data[-60:]
+    temp_input = list(last_60.reshape(1, -1)[0])
+    lst_output = []
+
+    for i in range(forecast_days):
+        X_input = np.array(temp_input[-60:]).reshape(1, 60, 1)
+        yhat = model.predict(X_input, verbose=0)
+        temp_input.append(yhat[0][0])
+        lst_output.append(yhat[0][0])
+
+    forecast = scaler.inverse_transform(np.array(lst_output).reshape(-1,1)).flatten()
+    future_dates = pd.date_range(df.index[-1] + pd.Timedelta(days=1), periods=forecast_days)
+    forecast_df = pd.DataFrame({'Date': future_dates, 'Predicted_Close': forecast}).set_index('Date')
+
+    st.subheader(f"🔮 {forecast_days}-Day Forecast")
+    st.dataframe(forecast_df.head(10))
+    st.line_chart(pd.concat([df['Close'], forecast_df['Predicted_Close']]))
 else:
-    st.info("Please upload a CSV file with stock data to begin.")
+    st.info("📥 Please upload a CSV file with stock data to begin.")
