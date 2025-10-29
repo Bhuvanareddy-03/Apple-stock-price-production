@@ -71,14 +71,7 @@ if uploaded_file is not None:
     ])
     model.compile(optimizer='adam', loss='mean_squared_error')
     early_stop = EarlyStopping(monitor='loss', patience=5, restore_best_weights=True)
-    history = model.fit(X_train, y_train, epochs=50, batch_size=32, verbose=0, callbacks=[early_stop])
-
-    # ----------------------------------------------------------
-    # Show Training Loss Curve
-    # ----------------------------------------------------------
-    st.subheader("📉 LSTM Training Loss Curve")
-    loss_df = pd.DataFrame({'Loss': history.history['loss']})
-    st.line_chart(loss_df)
+    model.fit(X_train, y_train, epochs=50, batch_size=32, verbose=0, callbacks=[early_stop])
 
     # ----------------------------------------------------------
     # Predict and Evaluate
@@ -119,14 +112,4 @@ if uploaded_file is not None:
     st.subheader(f"📅 {forecast_days}-Day Forecast Table")
     st.dataframe(forecast_df.head(10))
 
-    # ----------------------------------------------------------
-    # Download Button
-    # ----------------------------------------------------------
-    st.download_button(
-        label="📥 Download Forecast as CSV",
-        data=forecast_df.to_csv().encode('utf-8'),
-        file_name='forecast.csv',
-        mime='text/csv'
-    )
-else:
-    st.info("📥 Please upload a CSV file with stock data to begin.")
+   
