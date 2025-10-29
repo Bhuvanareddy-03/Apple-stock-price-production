@@ -37,7 +37,7 @@ if uploaded_file is not None:
     st.line_chart(df['Close'])
 
     # ----------------------------------------------------------
-    # Train-Test Split
+    # Train-Test Split and Scaling
     # ----------------------------------------------------------
     train_size = int(len(df) * 0.9)
     data = df[['Close']]
@@ -71,7 +71,14 @@ if uploaded_file is not None:
     ])
     model.compile(optimizer='adam', loss='mean_squared_error')
     early_stop = EarlyStopping(monitor='loss', patience=5, restore_best_weights=True)
-    model.fit(X_train, y_train, epochs=50, batch_size=32, verbose=0, callbacks=[early_stop])
+    history = model.fit(X_train, y_train, epochs=50, batch_size=32, verbose=0, callbacks=[early_stop])
+
+    # ----------------------------------------------------------
+    # Show Training Loss Curve
+    # ----------------------------------------------------------
+    st.subheader("📉 LSTM Training Loss Curve")
+    loss_df = pd.DataFrame({'Loss': history.history['loss']})
+    st.line_chart(loss_df)
 
     # ----------------------------------------------------------
     # Predict and Evaluate
@@ -88,7 +95,6 @@ if uploaded_file is not None:
         'Actual': y_test_actual.flatten(),
         'Predicted': pred_actual.flatten()
     }, index=df.index[-len(y_test_actual):])
-
     st.line_chart(result_df)
 
     st.markdown(f"**📌 R² Score:** {r2:.4f}  **📉 RMSE:** {rmse:.4f}")
@@ -113,7 +119,14 @@ if uploaded_file is not None:
     st.subheader(f"📅 {forecast_days}-Day Forecast Table")
     st.dataframe(forecast_df.head(10))
 
-    st.subheader("📈 Historical + Forecasted Closing Prices")
-    st.line_chart(pd.concat([df['Close'], forecast_df['Predicted_Close']]))
+    # ----------------------------------------------------------
+    # Download Button
+    # ----------------------------------------------------------
+    st.download_button(
+        label="📥 Download Forecast as CSV",
+        data=forecast_df.to_csv().encode('utf-8'),
+        file_name='forecast.csv',
+        mime='text/csv'
+    )
 else:
     st.info("📥 Please upload a CSV file with stock data to begin.")
